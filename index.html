@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lightweight QR Scanner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    :root {
+      --primary: #edb200;
+      --primary-dark: #5a5056;
+      --background: #33011f;
+      --surface: #13060d;
+      --on-surface: #f8fafc;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      color: #e0e0e0;
+      background-color: var(--background);
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      overflow: hidden;
+    }
+    
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100%;
+    }
+    
+    .scanner-section {
+      flex: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-color: #000;
+      overflow: hidden;
+    }
+    
+    .controls-container {
+      position: fixed;
+      bottom: 15px;
+      left: 0;
+      right: 0;
+      padding: 10px;
+      z-index: 10;
+      display: flex;
+      justify-content: center;
+    }
+    
+    .history-section {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 85%;
+      max-width: 320px;
+      height: 100vh;
+      background-color: var(--surface);
+      padding: 15px;
+      box-shadow: -2px 0 15px rgba(0, 0, 0, 0.5);
+      overflow-y: auto;
+      z-index: 100;
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+    }
+    
+    .history-section.active {
+      transform: translateX(0);
+    }
+    
+    .toggle-history {
+      position: fixed;
+      top: 15px;
+      right: 15px;
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 45px;
+      height: 45px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 101;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    }
+    
+    .status {
+      display: none;
+    }
+    
+    .timer {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      font-size: 13px;
+      font-weight: bold;
+      color: var(--primary);
+      background-color: rgba(0, 0, 0, 0.6);
+      padding: 6px 12px;
+      border-radius: 20px;
+      z-index: 10;
+    }
+    
+    .scanner-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+    
+    .scanner-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: none;
+    }
+    
+    .scanner-guide {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 200px;
+      height: 200px;
+      border: 2px solid rgba(255, 255, 255, 0.6);
+      border-radius: 8px;
+      box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.3);
+    }
+    
+    .scanner-line {
+      position: absolute;
+      height: 2px;
+      width: 100%;
+      background-color: var(--primary);
+      top: 0;
+    }
+    
+    #result {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(0, 0, 0, 0.9);
+      color: #fff;
+      padding: 15px 20px;
+      border-radius: 8px;
+      font-size: 15px;
+      display: none;
+      z-index: 20;
+      text-align: center;
+      max-width: 85%;
+      word-break: break-word;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+    }
+    
+    .btn {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 24px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      background-size: 60%;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    
+    .btn-file { 
+      background-color: #e67e22;
+    }
+    .btn-start { 
+      background-color: #2ecc71;
+    }
+    .btn-stop { 
+      background-color: #e74c3c;
+    }
+    
+    input[type="file"] {
+      display: none;
+    }
+    
+    .history {
+      background-color: #080808;
+      border-radius: 8px;
+      padding: 15px;
+      height: calc(94% - 30px);
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .history-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0;
+      color: var(--on-surface);
+    }
+    
+    .history-count {
+      font-size: 12px;
+      color: #cbd5e1;
+      background-color: rgba(255, 255, 255, 0.1);
+      padding: 4px 8px;
+      margin-right: 13%;
+      border-radius: 12px;
+    }
+    
+    .history-list {
+      flex: 1;
+      overflow-y: auto;
+      margin-bottom: 15px;
+    }
+    
+    .empty-history {
+      color: #cbd5e1;
+      text-align: center;
+      padding: 30px 15px;
+      font-size: 14px;
+    }
+    
+    .history-item {
+      padding: 10px;
+      margin-bottom: 8px;
+      background-color: rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 4px solid var(--primary);
+    }
+    
+    .history-item-content {
+      flex: 1;
+      word-break: break-word;
+      font-size: 13px;
+      padding-right: 10px;
+    }
+    
+    .history-item-number {
+      font-weight: 600;
+      margin-right: 8px;
+      color: var(--primary);
+      min-width: 20px;
+    }
+    
+    .history-item-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .history-item-btn {
+      background: none;
+      border: none;
+      color: #cbd5e1;
+      cursor: pointer;
+      padding: 5px;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .history-controls {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    
+    .history-btn {
+      flex: 1;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .history-clear {
+      background-color: #e74c3c;
+    }
+    
+    .history-download {
+      background-color: var(--primary);
+    }
+    
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #334155;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      z-index: 1000;
+      opacity: 0;
+      transition: opacity 0.3s;
+      max-width: 85%;
+      text-align: center;
+    }
+    
+    .toast.show {
+      opacity: 1;
+    }
+    
+    .disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    
+    .camera-permission {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: white;
+      background-color: rgba(0, 0, 0, 0.8);
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 85%;
+      z-index: 5;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .camera-permission p {
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+    
+    .camera-permission button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    
+    @media (max-width: 480px) {
+      .controls {
+        gap: 15px;
+      }
+      
+      .btn {
+        width: 55px;
+        height: 55px;
+        font-size: 22px;
+      }
+      
+      #result {
+        font-size: 14px;
+        padding: 12px 16px;
+        max-width: 90%;
+      }
+      
+      .scanner-guide {
+        width: 180px;
+        height: 180px;
+      }
+      
+      .history-section {
+        width: 90%;
+        padding: 12px;
+      }
+    }
+
+    @media (max-height: 600px) {
+      .btn {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+      }
+      
+      .controls {
+        gap: 12px;
+      }
+      
+      .scanner-guide {
+        width: 160px;
+        height: 160px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <button class="toggle-history" onclick="toggleHistory()">≡</button>
+    
+    <div class="scanner-section">
+      <p class="status" id="status">Ready to scan</p>
+      <div class="timer" id="timer">30:00</div>
+      
+      <div class="scanner-container" id="scannerBox">
+        <video id="scanner" playsinline></video>
+        <div class="scanner-overlay" id="scannerOverlay">
+          <div class="scanner-guide">
+            <div class="scanner-line"></div>
+          </div>
+        </div>
+        <div id="result"></div>
+        <div class="camera-permission" id="cameraPermission" style="display: none;">
+          <p>Camera access is required to scan QR codes.</p>
+          <p>Please allow camera permissions in your browser settings.</p>
+          <button onclick="requestCameraPermission()">Grant Permission</button>
+        </div>
+    </div>
+
+    <div class="controls-container">
+      <div class="controls">
+        <button class="btn btn-start" onclick="toggleCamera()" id="startBtn">▶</button>
+        <button class="btn btn-file" onclick="document.getElementById('fileInput').click()" id="fileBtn">📁</button>
+      </div>
+    </div>
+    
+    <input type="file" id="fileInput" accept="image/*" />
+  </div>
+  
+  <div class="history-section" id="historySection">
+    <div class="history">
+      <div class="history-header">
+        <h2 class="history-title">Scan History</h2>
+        <div class="history-count" id="historyCount">0 items</div>
+      </div>
+      
+      <div class="history-list" id="historyList">
+        <div class="empty-history">No scans yet</div>
+      </div>
+      
+      <div class="history-controls">
+        <button class="history-btn history-clear" onclick="clearHistory()" id="clearBtn">
+          <span>Clear All</span>
+        </button>
+        <button class="history-btn history-download" onclick="downloadPDF()" id="downloadBtn">
+          <span>Export PDF</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // DOM Elements
+    const video = document.getElementById("scanner");
+    const fileInput = document.getElementById("fileInput");
+    const resultDiv = document.getElementById("result");
+    const scannerBox = document.getElementById("scannerBox");
+    const scannerOverlay = document.getElementById("scannerOverlay");
+    const statusText = document.getElementById("status");
+    const startBtn = document.getElementById("startBtn");
+    const fileBtn = document.getElementById("fileBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const historyList = document.getElementById("historyList");
+    const historyCount = document.getElementById("historyCount");
+    const toast = document.getElementById("toast");
+    const timerDisplay = document.getElementById("timer");
+    const downloadBtn = document.getElementById("downloadBtn");
+    const historySection = document.getElementById("historySection");
+    const cameraPermission = document.getElementById("cameraPermission");
+
+    // App State
+    let stream = null;
+    let scanning = false;
+    let scanHistory = [];
+    let currentScanNumber = 1;
+    let lastScannedContent = null;
+    let duplicateWarningTimeout = null;
+    let scannerTimeout = null;
+    let scanTimer = null;
+    let timeLeft = 30 * 60; // 30 minutes in seconds
+    let timerActive = false;
+    let isPausedForResultDisplay = false;
+    let scanInterval = 500; // Reduced scan frequency for older devices
+
+    // Initialize from localStorage
+    function initializeFromStorage() {
+      try {
+        const savedHistory = localStorage.getItem('qrScanHistory');
+        if (savedHistory) {
+          scanHistory = JSON.parse(savedHistory);
+          currentScanNumber = scanHistory.length > 0 ? scanHistory[scanHistory.length - 1].number + 1 : 1;
+          updateHistoryDisplay();
+          updateHistoryCount();
+        }
+      } catch (e) {
+        console.error("Error loading history from storage:", e);
+        clearLocalStorage();
+      }
+    }
+
+    // Clear corrupted localStorage
+    function clearLocalStorage() {
+      localStorage.removeItem('qrScanHistory');
+      scanHistory = [];
+      currentScanNumber = 1;
+      updateHistoryDisplay();
+      updateHistoryCount();
+    }
+
+    // Initialize on load
+    initializeFromStorage();
+
+    // Event Listeners
+    fileInput.addEventListener('change', handleFileUpload);
+
+    // Toggle history panel
+    function toggleHistory() {
+      historySection.classList.toggle('active');
+    }
+
+    // Functions
+    function playBeep() {
+      // Simple beep using Web Audio API (lighter than audio element)
+      try {
+        const context = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = context.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(800, context.currentTime);
+        oscillator.connect(context.destination);
+        oscillator.start();
+        oscillator.stop(context.currentTime + 0.1);
+      } catch (e) {
+        console.log("Beep not supported");
+      }
+    }
+
+    function vibrate() {
+      // Simple vibration for older devices
+      if (navigator.vibrate) {
+        navigator.vibrate(200);
+      }
+    }
+
+    function startTimer() {
+      timerDisplay.style.display = 'block';
+      timeLeft = 30 * 60;
+      timerActive = true;
+      updateTimerDisplay();
+      
+      scanTimer = setInterval(() => {
+        timeLeft--;
+        updateTimerDisplay();
+        
+        if (timeLeft <= 0) {
+          stopTimer();
+          disableAllButtonsExceptPDF();
+        }
+      }, 1000);
+    }
+    
+    function stopTimer() {
+      if (scanTimer) {
+        clearInterval(scanTimer);
+        scanTimer = null;
+      }
+      timerActive = false;
+      timerDisplay.textContent = "Time expired";
+    }
+    
+    function updateTimerDisplay() {
+      const minutes = Math.floor(timeLeft / 60);
+      const seconds = timeLeft % 60;
+      timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    function disableAllButtonsExceptPDF() {
+      fileBtn.disabled = true;
+      startBtn.disabled = true;
+      clearBtn.disabled = true;
+      
+      fileBtn.classList.add('disabled');
+      startBtn.classList.add('disabled');
+      clearBtn.classList.add('disabled');
+      
+      stopCamera();
+      
+      showStatus("Scanning time expired");
+      showToast("Scanning time has ended.");
+    }
+
+    function enableAllButtons() {
+      fileBtn.disabled = false;
+      startBtn.disabled = false;
+      clearBtn.disabled = scanHistory.length === 0;
+      
+      fileBtn.classList.remove('disabled');
+      startBtn.classList.remove('disabled');
+      clearBtn.classList.remove('disabled');
+      
+      timerDisplay.style.display = 'none';
+      timerActive = false;
+      if (scanTimer) {
+        clearInterval(scanTimer);
+        scanTimer = null;
+      }
+      
+      showStatus("Ready to scan");
+    }
+
+    function handleFileUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      showStatus("Processing image...");
+      
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          
+          // Set canvas dimensions to match the image
+          canvas.width = img.width;
+          canvas.height = img.height;
+          
+          // Draw the image on the canvas
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          
+          try {
+            // Get the image data from the canvas
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            
+            // Try to decode the QR code
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: "attemptBoth",
+            });
+            
+            if (code) {
+              playBeep();
+              vibrate();
+              processScannedCode(code.data);
+              if (!timerActive) {
+                startTimer();
+              }
+            } else {
+              showCurrentResult("❌ No QR code found");
+              showStatus("No QR code in image", true);
+            }
+          } catch (error) {
+            showCurrentResult("❌ Error processing image");
+            showStatus("Image processing error", true);
+          }
+        };
+        img.onerror = () => {
+          showCurrentResult("❌ Invalid image");
+          showStatus("Invalid image file", true);
+        };
+        img.src = ev.target.result;
+      };
+      reader.onerror = () => {
+        showCurrentResult("❌ Error reading file");
+        showStatus("File read error", true);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function requestCameraPermission() {
+      cameraPermission.style.display = 'none';
+      startCamera();
+    }
+
+    // Toggle camera function
+    function toggleCamera() {
+      if (scanning) {
+        stopCamera();
+      } else {
+        startCamera();
+      }
+    }
+
+    function startCamera() {
+      if (timerActive && timeLeft <= 0) {
+        showToast("Scanning time has expired");
+        return;
+      }
+
+      resultDiv.style.display = 'none';
+      showStatus("Starting camera...");
+      fileBtn.disabled = true;
+      
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showStatus("Camera not supported", true);
+        fileBtn.disabled = false;
+        cameraPermission.style.display = 'block';
+        return;
+      }
+
+      if (!timerActive) {
+        startTimer();
+      }
+
+      // Use lower resolution for older devices
+      navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: "environment",
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        } 
+      })
+      .then(s => {
+        stream = s;
+        video.srcObject = stream;
+        video.style.display = 'block';
+        scannerOverlay.style.display = 'block';
+        scannerBox.classList.add('active');
+        showStatus("Scanning..");
+        
+        video.onplaying = () => {
+          scanning = true;
+          startBtn.textContent = "■";
+          scanFrame();
+        };
+        
+        video.onerror = () => {
+          showStatus("Camera error", true);
+          stopCamera();
+        };
+        
+        video.play().catch(err => {
+          showStatus("Error starting camera", true);
+          stopCamera();
+        });
+      })
+      .catch(err => {
+        console.error("Camera access error:", err);
+        
+        // If environment camera fails, try user-facing (front) camera
+        navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: "user",
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          } 
+        })
+        .then(s => {
+          stream = s;
+          video.srcObject = stream;
+          video.style.display = 'block';
+          scannerOverlay.style.display = 'block';
+          scannerBox.classList.add('active');
+          showStatus("Scanning with front camera..");
+          
+          video.onplaying = () => {
+            scanning = true;
+            startBtn.textContent = "■";
+            scanFrame();
+          };
+        })
+        .catch(err => {
+          console.error("Front camera also failed:", err);
+          showStatus("Camera access denied", true);
+          fileBtn.disabled = false;
+          cameraPermission.style.display = 'block';
+          
+          if (err.name === 'NotAllowedError') {
+            showToast("Please enable camera permissions");
+          } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
+            showToast("No camera found on this device");
+          }
+        });
+      });
+    }
+
+    function stopCamera() {
+      scanning = false;
+      fileBtn.disabled = false;
+      video.pause();
+      video.style.display = 'none';
+      scannerOverlay.style.display = 'none';
+      scannerBox.classList.remove('active');
+      showStatus("Camera stopped");
+      
+      startBtn.textContent = "▶";
+      
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      
+      if (scannerTimeout) {
+        clearTimeout(scannerTimeout);
+        scannerTimeout = null;
+      }
+    }
+
+    function scanFrame() {
+      if (!scanning || isPausedForResultDisplay || (timerActive && timeLeft <= 0)) {
+        return;
+      }
+      
+      try {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          const canvas = document.createElement("canvas");
+          // Use smaller canvas for better performance
+          canvas.width = 320;
+          canvas.height = 240;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, canvas.width, canvas.height, {
+            inversionAttempts: "dontInvert",
+          });
+          
+          if (code) {
+            playBeep();
+            vibrate();
+            processScannedCode(code.data);
+            return;
+          }
+        }
+        // Use setTimeout instead of requestAnimationFrame for better control on older devices
+        scannerTimeout = setTimeout(scanFrame, scanInterval);
+      } catch (error) {
+        console.error("Scan error:", error);
+        showStatus("Scan error occurred", true);
+        stopCamera();
+      }
+    }
+
+    function processScannedCode(content) {
+      if (!content || content.trim() === "") {
+        showCurrentResult("❌ Empty QR code");
+        showStatus("Empty QR code content", true);
+        return;
+      }
+
+      if (content === lastScannedContent) {
+        showDuplicateWarning();
+        return;
+      }
+
+      const isDuplicate = scanHistory.some(item => item.content === content);
+      
+      if (isDuplicate) {
+        showDuplicateWarning();
+        return;
+      }
+
+      lastScannedContent = content;
+      addToHistory(content);
+      showCurrentResult(content);
+      showStatus("Scan successful!");
+      showToast("QR code scanned!", 2000);
+      
+      isPausedForResultDisplay = true;
+      setTimeout(() => {
+        isPausedForResultDisplay = false;
+        resultDiv.style.display = 'none';
+        showStatus("Ready to scan...");
+        if (scanning) {
+          scanFrame();
+        }
+      }, 2000);
+    }
+
+    function showDuplicateWarning() {
+      showStatus("Duplicate detected!", true);
+      showCurrentResult("⚠️ Duplicate QR");
+      
+      if (duplicateWarningTimeout) {
+        clearTimeout(duplicateWarningTimeout);
+      }
+      duplicateWarningTimeout = setTimeout(() => {
+        showStatus("Ready to scan.");
+        resultDiv.style.display = 'none';
+      }, 2000);
+    }
+
+    function addToHistory(content) {
+      if (!content || content.startsWith("❌")) return;
+      
+      const timestamp = new Date().toLocaleString();
+      const scanItem = {
+        number: currentScanNumber++,
+        content: content,
+        timestamp: timestamp
+      };
+      
+      scanHistory.push(scanItem);
+      updateHistoryDisplay();
+      updateHistoryCount();
+      saveHistory();
+    }
+
+    function showCurrentResult(text) {
+      resultDiv.innerHTML = text;
+      resultDiv.style.display = 'block';
+    }
+
+    function updateHistoryDisplay() {
+      if (scanHistory.length === 0) {
+        historyList.innerHTML = '<div class="empty-history">No scans yet</div>';
+        return;
+      }
+
+      historyList.innerHTML = '';
+      // Only show last 20 items to prevent performance issues
+      const displayItems = scanHistory.slice(-20);
+      displayItems.forEach(item => {
+        const historyItem = document.createElement('div');
+        historyItem.className = 'history-item';
+        historyItem.innerHTML = `
+          <div class="history-item-number">${item.number}.</div>
+          <div class="history-item-content">${item.content}</div>
+          <div class="history-item-actions">
+            <button class="history-item-btn" onclick="deleteHistoryItem(${item.number}, event)" title="Delete">✕</button>
+          </div>
+        `;
+        historyList.appendChild(historyItem);
+      });
+      
+      historyList.scrollTop = historyList.scrollHeight;
+    }
+    
+    function updateHistoryCount() {
+      const count = scanHistory.length;
+      historyCount.textContent = `${count} ${count === 1 ? 'item' : 'items'}`;
+      downloadBtn.disabled = count === 0;
+      clearBtn.disabled = count === 0;
+    }
+
+    // Function to extract data from QR content
+    function extractDataFromContent(content) {
+      // Try to parse as JSON first
+      try {
+        const data = JSON.parse(content);
+        return {
+          fullName: data.fullName || data.name || data.Name || data.FullName || data.nama || data.Nama || "",
+          phone: data.phone || data.mobile || data.Phone || data.Mobile || data.telepon || data.Telepon || "",
+          gender: data.gender || data.Gender || data.jenisKelamin || data.JenisKelamin || "",
+          timestamp: new Date().toLocaleString()
+        };
+      } catch (e) {
+        // If not JSON, try to extract from text pattern
+        const nameMatch = content.match(/full name[:=\s]*([^\n,]+)/i);
+        const phoneMatch = content.match(/(?:phone|mobile|tel|telepon|telefono|hp|handphone)[:=\s]*([+\d\s\-()]+)/i);
+        const genderMatch = content.match(/(?:gender|jenis kelamin|sex)[:=\s]*([^\n,]+)/i);
+        
+        // Extract name
+        let extractedName = nameMatch ? nameMatch[1].trim() : "";
+        
+        // If no explicit name field found, try to find the first line that looks like a name
+        if (!extractedName) {
+          const lines = content.split('\n');
+          for (const line of lines) {
+            // A name typically has letters, spaces, and possibly dots for initials
+            if (line.match(/^[A-Za-z\s\.]+$/) && line.trim().length > 3) {
+              extractedName = line.trim();
+              break;
+            }
+          }
+        }
+        
+        return {
+          fullName: extractedName,
+          phone: phoneMatch ? phoneMatch[1].trim() : "",
+          gender: genderMatch ? genderMatch[1].trim() : "",
+          timestamp: new Date().toLocaleString()
+        };
+      }
+    }
+
+    function downloadPDF() {
+      if (scanHistory.length === 0) {
+        showToast("No scans to export");
+        return;
+      }
+
+      try {
+        // Check if jsPDF is available
+        if (typeof window.jspdf === 'undefined') {
+          showToast("PDF library not loaded. Using fallback method.", true);
+          downloadTextFallback();
+          return;
+        }
+        
+        // Create a new jsPDF instance
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        // Add header
+        doc.setFillColor(51, 1, 31);
+        doc.rect(0, 0, 220, 20, 'F');
+        doc.setFontSize(16);
+        doc.setTextColor(255, 255, 255);
+        doc.text("QR Code Scan Report", 105, 12, { align: "center" });
+        
+        // Add generation date
+        doc.setFontSize(10);
+        doc.setTextColor(255, 255, 255);
+        const date = new Date().toLocaleDateString();
+        const time = new Date().toLocaleTimeString();
+        doc.text(`Generated: ${date} ${time}`, 105, 18, { align: "center" });
+        
+        // Reset text color
+        doc.setTextColor(0, 0, 0);
+        
+        // Extract data from scan history
+        const tableData = scanHistory.map((item, index) => {
+          const extractedData = extractDataFromContent(item.content);
+          return [
+            index + 1,
+            extractedData.fullName || "N/A",
+            extractedData.phone || "N/A",
+            extractedData.gender || "N/A",
+            item.timestamp
+          ];
+        });
+        
+        // Create the table
+        doc.autoTable({
+          head: [['#', 'Full Name', 'Phone', 'Gender', 'Date']],
+          body: tableData,
+          startY: 30,
+          theme: 'grid',
+          styles: {
+            fontSize: 9,
+            cellPadding: 3,
+            overflow: 'linebreak'
+          },
+          headStyles: {
+            fillColor: [51, 1, 31],
+            textColor: 255,
+            fontStyle: 'bold',
+            fontSize: 10
+          },
+          alternateRowStyles: {
+            fillColor: [241, 245, 249]
+          },
+          columnStyles: {
+            0: { cellWidth: 10 },
+            1: { cellWidth: 40 },
+            2: { cellWidth: 35 },
+            3: { cellWidth: 25 },
+            4: { cellWidth: 45 }
+          },
+          margin: { top: 25 }
+        });
+        
+        // Add page numbers
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+          doc.setPage(i);
+          doc.setFontSize(10);
+          doc.setTextColor(100, 100, 100);
+          doc.text(`Page ${i} of ${pageCount}`, 200, 285, { align: "right" });
+        }
+        
+        // Save the PDF - using data URI for compatibility
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const pdfDataUri = doc.output('datauristring');
+        
+        // Create a download link
+        const downloadLink = document.createElement('a');
+        downloadLink.href = pdfDataUri;
+        downloadLink.download = `QR_Scan_Report_${dateStr}.pdf`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+
+        showToast("PDF report downloaded");
+        
+      } catch (e) {
+        console.error("PDF export error:", e);
+        showToast("Error generating PDF report", true);
+        
+        // Fallback to text download
+        downloadTextFallback();
+      }
+    }
+
+    function downloadTextFallback() {
+      try {
+        let textContent = "QR Code Scan Report\n\n";
+        textContent += "Generated on: " + new Date().toLocaleDateString() + " at " + new Date().toLocaleTimeString() + "\n\n";
+        
+        scanHistory.forEach((item, index) => {
+          const extractedData = extractDataFromContent(item.content);
+          textContent += `${index + 1}. ${extractedData.fullName || "N/A"} | ${extractedData.phone || "N/A"} | ${extractedData.gender || "N/A"} | ${item.timestamp}\n`;
+        });
+        
+        const blob = new Blob([textContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `QR_Scan_Report_${new Date().toISOString().slice(0, 10)}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast("Downloaded as text file instead");
+      } catch (fallbackError) {
+        console.error("Fallback also failed:", fallbackError);
+        showToast("Export failed completely", true);
+      }
+    }
+
+    function deleteHistoryItem(number, event) {
+      event.stopPropagation();
+      scanHistory = scanHistory.filter(i => i.number !== number);
+      updateHistoryDisplay();
+      updateHistoryCount();
+      saveHistory();
+      showToast("Item deleted");
+    }
+
+    function clearHistory() {
+      if (scanHistory.length === 0) {
+        showToast("History is already empty");
+        return;
+      }
+      
+      if (confirm("Are you sure you want to clear all scan history?")) {
+        scanHistory = [];
+        currentScanNumber = 1;
+        lastScannedContent = null;
+        updateHistoryDisplay();
+        updateHistoryCount();
+        saveHistory();
+        showToast("History cleared");
+      }
+    }
+
+    function saveHistory() {
+      try {
+        localStorage.setItem('qrScanHistory', JSON.stringify(scanHistory));
+      } catch (e) {
+        console.error("Error saving history:", e);
+        showToast("Error saving history", true);
+      }
+    }
+    
+    function showStatus(message, isError = false) {
+      statusText.textContent = message;
+      statusText.className = isError ? 'status error-text' : 'status';
+    }
+    
+    function showToast(message, duration = 2000, isError = false) {
+      toast.textContent = message;
+      toast.className = isError ? 'toast error-text' : 'toast';
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, duration);
+    }
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', () => {
+      stopCamera();
+      stopTimer();
+      if (duplicateWarningTimeout) {
+        clearTimeout(duplicateWarningTimeout);
+      }
+      if (scannerTimeout) {
+        clearTimeout(scannerTimeout);
+      }
+    });
+
+    // Initialize button states
+    updateHistoryCount();
+  </script>
+</body>
+</html>
